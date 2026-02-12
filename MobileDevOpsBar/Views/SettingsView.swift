@@ -15,6 +15,7 @@ struct SettingsView: View {
     @State private var deployRepoPath = ""
     @State private var deployEnvBranch = "qa"
     @State private var message = ""
+    @AppStorage("rallyLinkTemplate") private var rallyLinkTemplate = ""
     @AppStorage("autoRefreshEnabled") private var autoRefreshEnabled = false
     @AppStorage("notifyMerged") private var notifyMerged = true
     @AppStorage("notifyChecksFailed") private var notifyChecksFailed = true
@@ -91,6 +92,13 @@ struct SettingsView: View {
                 Toggle("Checks failed", isOn: $notifyChecksFailed)
                 Toggle("Review requested", isOn: $notifyReviewRequested)
                 Toggle("PR comments", isOn: $notifyPRComments)
+            }
+
+            Section("Rally") {
+                TextField("Rally URL template", text: $rallyLinkTemplate)
+                Text("Use {ticketnumber} placeholder. Example: https://rally.example.com/detail/{ticketnumber}")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             if !message.isEmpty {

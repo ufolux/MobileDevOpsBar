@@ -30,6 +30,7 @@ Build a macOS desktop tool (menu bar + dashboard) to support daily development w
 
 ## PR Tracking
 - PRs linked by source repo + head branch (auto-detect, no manual URL required).
+- Source PRs can also be created from within the app by selecting a target/base branch.
 - Notification events:
   - PR merged
   - checks failed
@@ -65,6 +66,11 @@ Build a macOS desktop tool (menu bar + dashboard) to support daily development w
 3. New Work Item modal
 4. Settings (auth + repos + workflow + refresh)
 5. Activity log (phase 2)
+
+## Rally Link
+- Settings provides Rally URL template support.
+- Template supports `{ticketnumber}` placeholder.
+- Work item detail shows a clickable Rally link when template is configured.
 
 ## Implementation Phases
 1. App shell + data models + settings + keychain.

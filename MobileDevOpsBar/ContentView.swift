@@ -9,7 +9,13 @@ struct ContentView: View {
     @Query(sort: \DeploymentRepoConfig.updatedAt, order: .reverse) private var deploymentRepos: [DeploymentRepoConfig]
 
     @State private var showingNewWorkItem = false
+    @State private var showingCreateSourcePRSheet = false
     @State private var selectedWorkItemID: UUID?
+    @State private var sourcePRItemID: UUID?
+    @State private var sourcePRBaseBranches: [String] = []
+    @State private var sourcePRDefaultBaseBranch: String = "main"
+    @State private var showingDeleteConfirmation = false
+    @State private var pendingDeletionIDs: [UUID] = []
     @State private var statusMessage = "Ready"
 
     @AppStorage("autoRefreshEnabled") private var autoRefreshEnabled = false
@@ -23,6 +29,11 @@ struct ContentView: View {
     private var selectedWorkItem: WorkItem? {
         guard let selectedWorkItemID else { return nil }
         return workItems.first(where: { $0.id == selectedWorkItemID })
+    }
+
+    private var sourcePRItem: WorkItem? {
+        guard let sourcePRItemID else { return nil }
+        return workItems.first(where: { $0.id == sourcePRItemID })
     }
 
     var body: some View {
@@ -84,7 +95,8 @@ struct ContentView: View {
                 WorkItemDetailView(
                     item: selectedWorkItem,
                     onRefresh: { Task { await refresh(selectedWorkItem) } },
-                    onCreateDeploymentPR: { Task { await createDeploymentPR(for: selectedWorkItem) } }
+                    onCreateDeploymentPR: { Task { await createDeploymentPR(for: selectedWorkItem) } },
+                    onCreateSourcePR: { Task { await prepareSourcePRCreation(for: selectedWorkItem) } }
                 )
             } else {
                 ContentUnavailableView(
@@ -97,6 +109,21 @@ struct ContentView: View {
         .sheet(isPresented: $showingNewWorkItem) {
             NewWorkItemSheet(existingBranches: workItems.map { $0.localBranch }) { message in
                 statusMessage = message
+            }
+        }
+        .sheet(isPresented: $showingCreateSourcePRSheet) {
+            if let sourcePRItem {
+                CreateSourcePRSheet(
+                    ticketID: sourcePRItem.ticketID,
+                    branchName: sourcePRItem.localBranch,
+                    baseBranches: sourcePRBaseBranches,
+                    defaultBaseBranch: sourcePRDefaultBaseBranch,
+                    onCreate: { baseBranch, title, prBody in
+                        Task {
+                            await createSourcePR(for: sourcePRItem, baseBranch: baseBranch, title: title, body: prBody)
+                        }
+                    }
+                )
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: AppEvents.refreshAll)) { _ in
@@ -118,6 +145,16 @@ struct ContentView: View {
         }
         .task {
             NotificationService.requestAuthorizationIfNeeded()
+        }
+        .alert("Delete Work Item", isPresented: $showingDeleteConfirmation) {
+            Button("Cancel", role: .cancel) {
+                pendingDeletionIDs = []
+            }
+            Button("Delete", role: .destructive) {
+                confirmDeletePendingItems()
+            }
+        } message: {
+            Text("This will permanently remove the selected closed item(s).")
         }
     }
 
@@ -273,6 +310,57 @@ struct ContentView: View {
         }
     }
 
+    private func prepareSourcePRCreation(for item: WorkItem) async {
+        let token = KeychainService.loadGitHubToken().trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !token.isEmpty else {
+            statusMessage = "Missing GitHub PAT."
+            return
+        }
+
+        do {
+            let branches = try await GitHubClient.fetchBranches(repoFullName: item.sourceRepoFullName, token: token)
+            sourcePRBaseBranches = branches
+            sourcePRItemID = item.id
+            if let sourceRepo = sourceRepos.first(where: { $0.repoFullName == item.sourceRepoFullName }) {
+                sourcePRDefaultBaseBranch = sourceRepo.defaultTargetBranch
+            } else {
+                sourcePRDefaultBaseBranch = "main"
+            }
+            showingCreateSourcePRSheet = true
+            statusMessage = "Loaded base branches for \(item.ticketID)."
+        } catch {
+            item.lastErrorMessage = error.localizedDescription
+            statusMessage = "Failed to load branches for \(item.ticketID)."
+        }
+    }
+
+    private func createSourcePR(for item: WorkItem, baseBranch: String, title: String, body: String) async {
+        let token = KeychainService.loadGitHubToken().trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !token.isEmpty else {
+            statusMessage = "Missing GitHub PAT."
+            return
+        }
+
+        do {
+            let created = try await GitHubClient.createPullRequest(
+                repoFullName: item.sourceRepoFullName,
+                title: title,
+                body: body,
+                head: item.localBranch,
+                base: baseBranch,
+                token: token
+            )
+            item.prNumber = created.number
+            item.prURL = created.htmlURL
+            item.prState = .open
+            item.updatedAt = .now
+            statusMessage = "Created source PR for \(item.ticketID)."
+        } catch {
+            item.lastErrorMessage = error.localizedDescription
+            statusMessage = "Failed to create source PR for \(item.ticketID)."
+        }
+    }
+
     private func derivePRState(from pullRequest: PullRequestSummary) -> PRState {
         if pullRequest.mergedAt != nil {
             return .merged
@@ -285,12 +373,31 @@ struct ContentView: View {
     }
 
     private func deleteWorkItems(offsets: IndexSet) {
+        let itemsToDelete = offsets.map { workItems[$0] }
+        guard !itemsToDelete.isEmpty else { return }
+
+        let nonClosedItems = itemsToDelete.filter { $0.prState != .closed }
+        guard nonClosedItems.isEmpty else {
+            statusMessage = "Only closed items can be deleted."
+            return
+        }
+
+        pendingDeletionIDs = itemsToDelete.map(\.id)
+        showingDeleteConfirmation = true
+    }
+
+    private func confirmDeletePendingItems() {
+        let ids = Set(pendingDeletionIDs)
+        let itemsToDelete = workItems.filter { ids.contains($0.id) }
+
         withAnimation {
-            for index in offsets {
-                modelContext.delete(workItems[index])
+            for item in itemsToDelete {
+                modelContext.delete(item)
             }
         }
-        statusMessage = "Deleted \(offsets.count) item(s)."
+
+        statusMessage = "Deleted \(itemsToDelete.count) item(s)."
+        pendingDeletionIDs = []
     }
 }
 

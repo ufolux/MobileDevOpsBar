@@ -58,6 +58,13 @@
   - commits/pushes and opens GitHub PR
 - Added deployment PR trigger action in work item details.
 - Revalidated compilation with `xcodebuild` (Debug build succeeds).
+- Added Rally link template support:
+  - settings field for URL template with `{ticketnumber}` placeholder
+  - clickable Rally ticket link in work item details
+- Added source PR creation flow in app:
+  - fetch base branch list from GitHub
+  - select target/base branch in a modal
+  - create source PR and persist PR URL/number in work item
 
 ### In Progress
 - End-to-end hardening (API edge cases, git failure recovery, and UX messaging).

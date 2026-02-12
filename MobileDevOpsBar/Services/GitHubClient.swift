@@ -26,6 +26,7 @@ struct JobSummary {
 }
 
 struct CreatedPullRequest {
+    let number: Int
     let htmlURL: String
 }
 
@@ -98,27 +99,23 @@ enum GitHubClient {
     }
 
     static func fetchPullRequestSignals(repoFullName: String, prNumber: Int, token: String) async throws -> PullRequestSignals {
-        async let reviewers: ReviewersResponse = request(
+        let reviewersResult: ReviewersResponse = try await request(
             url: URL(string: "https://api.github.com/repos/\(repoFullName)/pulls/\(prNumber)/requested_reviewers")!,
             token: token,
             decodeAs: ReviewersResponse.self
         )
 
-        async let issueComments: [IssueCommentResponse] = request(
+        let issueCommentsResult: [IssueCommentResponse] = try await request(
             url: URL(string: "https://api.github.com/repos/\(repoFullName)/issues/\(prNumber)/comments?per_page=100")!,
             token: token,
             decodeAs: [IssueCommentResponse].self
         )
 
-        async let reviewComments: [ReviewCommentResponse] = request(
+        let reviewCommentsResult: [ReviewCommentResponse] = try await request(
             url: URL(string: "https://api.github.com/repos/\(repoFullName)/pulls/\(prNumber)/comments?per_page=100")!,
             token: token,
             decodeAs: [ReviewCommentResponse].self
         )
-
-        let reviewersResult = try await reviewers
-        let issueCommentsResult = try await issueComments
-        let reviewCommentsResult = try await reviewComments
 
         return PullRequestSignals(
             reviewRequestedCount: reviewersResult.users.count + reviewersResult.teams.count,
@@ -169,7 +166,13 @@ enum GitHubClient {
         let url = URL(string: "https://api.github.com/repos/\(repoFullName)/pulls")!
         let payload = CreatePullRequestRequest(title: title, body: body, head: head, base: base)
         let response: CreatePullRequestResponse = try await requestWithBody(url: url, token: token, body: payload, decodeAs: CreatePullRequestResponse.self)
-        return CreatedPullRequest(htmlURL: response.htmlURL)
+        return CreatedPullRequest(number: response.number, htmlURL: response.htmlURL)
+    }
+
+    static func fetchBranches(repoFullName: String, token: String) async throws -> [String] {
+        let url = URL(string: "https://api.github.com/repos/\(repoFullName)/branches?per_page=100")!
+        let response: [BranchResponse] = try await request(url: url, token: token, decodeAs: [BranchResponse].self)
+        return response.map(\.name).sorted()
     }
 
     private static func owner(from repoFullName: String) throws -> String {
@@ -320,9 +323,15 @@ private struct CreatePullRequestRequest: Encodable {
 }
 
 private struct CreatePullRequestResponse: Decodable {
+    let number: Int
     let htmlURL: String
 
     enum CodingKeys: String, CodingKey {
+        case number
         case htmlURL = "html_url"
     }
+}
+
+private struct BranchResponse: Decodable {
+    let name: String
 }

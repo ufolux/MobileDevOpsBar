@@ -13,6 +13,10 @@ struct NewWorkItemSheet: View {
     @State private var selectedRepoID: UUID?
     @State private var createGitBranch = true
     @State private var errorMessage = ""
+    @State private var setupRepoURL = ""
+    @State private var setupRepoPath = ""
+    @State private var setupWorkflow = ""
+    @State private var setupTargetBranch = "main"
 
     private var parsedTickets: [String] {
         TicketParser.parseTickets(from: ticketText)
@@ -20,15 +24,45 @@ struct NewWorkItemSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("New Work Item")
-                .font(.title2)
+            HStack {
+                Text("New Work Item")
+                    .font(.title2)
+                Spacer()
+                Button {
+                    dismiss()
+                } label: {
+                    Label("Close", systemImage: "xmark.circle.fill")
+                        .labelStyle(.iconOnly)
+                }
+                .buttonStyle(.plain)
+            }
 
             if sourceRepos.isEmpty {
-                ContentUnavailableView(
-                    "Add source repo first",
-                    systemImage: "gearshape",
-                    description: Text("Open Settings and add at least one source repo before creating items.")
-                )
+                Text("Initialize Source Repo")
+                    .font(.headline)
+
+                Text("No source repo is configured yet. Add one now to start creating work items.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+
+                TextField("Repo URL", text: $setupRepoURL)
+                TextField("Local repo path", text: $setupRepoPath)
+                TextField("Workflow name/file", text: $setupWorkflow)
+                TextField("Default target branch", text: $setupTargetBranch)
+
+                if !errorMessage.isEmpty {
+                    Text(errorMessage)
+                        .foregroundStyle(.red)
+                        .font(.caption)
+                }
+
+                HStack {
+                    Spacer()
+                    Button("Initialize Repo") {
+                        initializeSourceRepo()
+                    }
+                    .keyboardShortcut(.defaultAction)
+                }
             } else {
                 Picker("Source Repo", selection: $selectedRepoID) {
                     ForEach(sourceRepos) { repo in
@@ -83,6 +117,34 @@ struct NewWorkItemSheet: View {
                 selectedRepoID = sourceRepos.first?.id
             }
         }
+    }
+
+    private func initializeSourceRepo() {
+        guard let repoFullName = RepoURLParser.fullName(from: setupRepoURL) else {
+            errorMessage = "Invalid repo URL."
+            return
+        }
+
+        let localPath = setupRepoPath.trimmingCharacters(in: .whitespacesAndNewlines)
+        let workflow = setupWorkflow.trimmingCharacters(in: .whitespacesAndNewlines)
+        let targetBranch = setupTargetBranch.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !localPath.isEmpty, !workflow.isEmpty else {
+            errorMessage = "Local path and workflow are required."
+            return
+        }
+
+        let sourceRepo = SourceRepoConfig(
+            repoURL: setupRepoURL,
+            repoFullName: repoFullName,
+            localPath: localPath,
+            defaultTargetBranch: targetBranch.isEmpty ? "main" : targetBranch,
+            workflowIdentifier: workflow
+        )
+        modelContext.insert(sourceRepo)
+
+        selectedRepoID = sourceRepo.id
+        errorMessage = ""
     }
 
     private func createWorkItems() {
