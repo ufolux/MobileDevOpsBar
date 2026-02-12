@@ -2,6 +2,18 @@ import SwiftUI
 import SwiftData
 
 struct SettingsView: View {
+    private enum DeleteTarget: Identifiable {
+        case source(UUID)
+        case deployment(UUID)
+
+        var id: String {
+            switch self {
+            case .source(let id): return "source-\(id.uuidString)"
+            case .deployment(let id): return "deployment-\(id.uuidString)"
+            }
+        }
+    }
+
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \SourceRepoConfig.updatedAt, order: .reverse) private var sourceRepos: [SourceRepoConfig]
     @Query(sort: \DeploymentRepoConfig.updatedAt, order: .reverse) private var deploymentRepos: [DeploymentRepoConfig]
@@ -15,6 +27,10 @@ struct SettingsView: View {
     @State private var deployRepoPath = ""
     @State private var deployEnvBranch = "qa"
     @State private var message = ""
+    @State private var editingSourceRepoID: UUID?
+    @State private var editingDeploymentRepoID: UUID?
+    @State private var deleteTarget: DeleteTarget?
+
     @AppStorage("rallyLinkTemplate") private var rallyLinkTemplate = ""
     @AppStorage("autoRefreshEnabled") private var autoRefreshEnabled = false
     @AppStorage("notifyMerged") private var notifyMerged = true
@@ -23,8 +39,44 @@ struct SettingsView: View {
     @AppStorage("notifyPRComments") private var notifyPRComments = true
 
     var body: some View {
-        Form {
-            Section("Authentication") {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                authSection
+                sourceRepoSection
+                deploymentSection
+                preferencesSection
+                rallySection
+
+                if !message.isEmpty {
+                    Text(message)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .padding()
+        }
+        .frame(minWidth: 760, minHeight: 620)
+        .task {
+            restorePersistedRepoSettings()
+        }
+        .alert("Delete preset?", isPresented: Binding(
+            get: { deleteTarget != nil },
+            set: { if !$0 { deleteTarget = nil } }
+        )) {
+            Button("Cancel", role: .cancel) {
+                deleteTarget = nil
+            }
+            Button("Delete", role: .destructive) {
+                confirmDelete()
+            }
+        } message: {
+            Text("This will remove the saved preset from settings.")
+        }
+    }
+
+    private var authSection: some View {
+        GroupBox("Authentication") {
+            VStack(alignment: .leading, spacing: 10) {
                 SecureField("GitHub PAT", text: $githubToken)
                 Button("Save Token") {
                     do {
@@ -35,28 +87,69 @@ struct SettingsView: View {
                     }
                 }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
 
-            Section("Source Repos") {
+    private var sourceRepoSection: some View {
+        GroupBox("Source Repo Presets") {
+            VStack(alignment: .leading, spacing: 12) {
                 TextField("Repo URL", text: $sourceRepoURL)
                 TextField("Local repo path", text: $sourceRepoPath)
                 TextField("Workflow name/file", text: $sourceWorkflow)
                 TextField("Default target branch", text: $sourceTargetBranch)
-                Button("Add Source Repo") {
-                    addSourceRepo()
-                }
 
-                ForEach(sourceRepos) { repo in
-                    VStack(alignment: .leading) {
-                        Text(repo.repoFullName)
-                        Text(repo.localPath)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                HStack {
+                    Button(editingSourceRepoID == nil ? "Add Source Repo" : "Save Source Repo") {
+                        saveSourceRepo()
+                    }
+
+                    if editingSourceRepoID != nil {
+                        Button("Cancel Edit") {
+                            clearSourceForm()
+                        }
                     }
                 }
-                .onDelete(perform: deleteSourceRepos)
-            }
 
-            Section("Deployment Repo") {
+                Divider()
+                Text("Saved Presets")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+
+                if sourceRepos.isEmpty {
+                    Text("No source presets saved yet.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(sourceRepos) { repo in
+                        HStack(alignment: .top) {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(repo.repoFullName)
+                                    .font(.headline)
+                                Text(repo.localPath)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                Text("Workflow: \(repo.workflowIdentifier) | Base: \(repo.defaultTargetBranch)")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Button("Edit") { loadSourceRepoForEditing(repo) }
+                            Button("Delete", role: .destructive) {
+                                deleteTarget = .source(repo.id)
+                            }
+                        }
+                        .padding(.vertical, 4)
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private var deploymentSection: some View {
+        GroupBox("Deployment Repo Presets") {
+            VStack(alignment: .leading, spacing: 12) {
                 TextField("Repo URL", text: $deployRepoURL)
                 TextField("Local repo path", text: $deployRepoPath)
                 Picker("Default env branch", selection: $deployEnvBranch) {
@@ -65,58 +158,100 @@ struct SettingsView: View {
                 }
                 .pickerStyle(.segmented)
 
-                Button("Save Deployment Repo") {
-                    saveDeploymentRepo()
-                }
+                HStack {
+                    Button(editingDeploymentRepoID == nil ? "Save Deployment Repo" : "Update Deployment Repo") {
+                        saveDeploymentRepo()
+                    }
 
-                ForEach(deploymentRepos) { repo in
-                    VStack(alignment: .leading) {
-                        Text(repo.repoFullName)
-                        Text("Env: \(repo.selectedEnvironmentBranch) | \(DeploymentRepoConfig.configFilePath)")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                    if editingDeploymentRepoID != nil {
+                        Button("Cancel Edit") {
+                            clearDeploymentForm()
+                        }
                     }
                 }
-                .onDelete(perform: deleteDeploymentRepos)
-            }
 
-            Section("Refresh") {
+                Divider()
+                Text("Saved Presets")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+
+                if deploymentRepos.isEmpty {
+                    Text("No deployment presets saved yet.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(deploymentRepos) { repo in
+                        HStack(alignment: .top) {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(repo.repoFullName)
+                                    .font(.headline)
+                                Text(repo.localPath)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                Text("Env: \(repo.selectedEnvironmentBranch) | \(DeploymentRepoConfig.configFilePath)")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Button("Edit") { loadDeploymentRepoForEditing(repo) }
+                            Button("Delete", role: .destructive) {
+                                deleteTarget = .deployment(repo.id)
+                            }
+                        }
+                        .padding(.vertical, 4)
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private var preferencesSection: some View {
+        GroupBox("Preferences") {
+            VStack(alignment: .leading, spacing: 8) {
                 Toggle("Auto refresh every 20 minutes", isOn: $autoRefreshEnabled)
                 Text("Manual refresh remains available in menu bar and dashboard.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                Divider()
+                Toggle("Notify on merged PR", isOn: $notifyMerged)
+                Toggle("Notify on failed checks", isOn: $notifyChecksFailed)
+                Toggle("Notify on review requested", isOn: $notifyReviewRequested)
+                Toggle("Notify on PR comments", isOn: $notifyPRComments)
             }
-
-            Section("Notifications") {
-                Toggle("Merged", isOn: $notifyMerged)
-                Toggle("Checks failed", isOn: $notifyChecksFailed)
-                Toggle("Review requested", isOn: $notifyReviewRequested)
-                Toggle("PR comments", isOn: $notifyPRComments)
-            }
-
-            Section("Rally") {
-                TextField("Rally URL template", text: $rallyLinkTemplate)
-                Text("Use {ticketnumber} placeholder. Example: https://rally.example.com/detail/{ticketnumber}")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
-            if !message.isEmpty {
-                Text(message)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .padding()
-        .frame(minWidth: 700, minHeight: 600)
-        .task {
-            restorePersistedRepoSettings()
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
-    private func addSourceRepo() {
+    private var rallySection: some View {
+        GroupBox("Rally") {
+            VStack(alignment: .leading, spacing: 8) {
+                TextField("Rally URL template", text: $rallyLinkTemplate)
+                Text("Use {ticketnumber}. Example: https://rally.example.com/detail/{ticketnumber}")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private func saveSourceRepo() {
         guard let repoFullName = RepoURLParser.fullName(from: sourceRepoURL) else {
             message = "Invalid source repo URL."
+            return
+        }
+
+        if let editingID = editingSourceRepoID,
+           let editingRepo = sourceRepos.first(where: { $0.id == editingID }) {
+            editingRepo.repoURL = sourceRepoURL
+            editingRepo.repoFullName = repoFullName
+            editingRepo.localPath = sourceRepoPath
+            editingRepo.defaultTargetBranch = sourceTargetBranch
+            editingRepo.workflowIdentifier = sourceWorkflow
+            editingRepo.updatedAt = .now
+            persistRepoSettings()
+            clearSourceForm()
+            message = "Updated source repo \(repoFullName)."
             return
         }
 
@@ -127,11 +262,7 @@ struct SettingsView: View {
             existing.workflowIdentifier = sourceWorkflow
             existing.updatedAt = .now
             persistRepoSettings()
-
-            sourceRepoURL = ""
-            sourceRepoPath = ""
-            sourceWorkflow = ""
-            sourceTargetBranch = "main"
+            clearSourceForm()
             message = "Updated source repo \(repoFullName)."
             return
         }
@@ -145,11 +276,7 @@ struct SettingsView: View {
         )
         modelContext.insert(sourceRepo)
         persistRepoSettings()
-
-        sourceRepoURL = ""
-        sourceRepoPath = ""
-        sourceWorkflow = ""
-        sourceTargetBranch = "main"
+        clearSourceForm()
         message = "Added source repo \(repoFullName)."
     }
 
@@ -159,12 +286,26 @@ struct SettingsView: View {
             return
         }
 
+        if let editingID = editingDeploymentRepoID,
+           let editingRepo = deploymentRepos.first(where: { $0.id == editingID }) {
+            editingRepo.repoURL = deployRepoURL
+            editingRepo.repoFullName = repoFullName
+            editingRepo.localPath = deployRepoPath
+            editingRepo.selectedEnvironmentBranch = deployEnvBranch
+            editingRepo.updatedAt = .now
+            persistRepoSettings()
+            clearDeploymentForm()
+            message = "Updated deployment repo \(repoFullName)."
+            return
+        }
+
         if let existing = deploymentRepos.first(where: { $0.repoFullName == repoFullName }) {
             existing.repoURL = deployRepoURL
             existing.localPath = deployRepoPath
             existing.selectedEnvironmentBranch = deployEnvBranch
             existing.updatedAt = .now
             persistRepoSettings()
+            clearDeploymentForm()
             message = "Updated deployment repo \(repoFullName)."
             return
         }
@@ -177,25 +318,66 @@ struct SettingsView: View {
         )
         modelContext.insert(deploymentRepo)
         persistRepoSettings()
-
-        deployRepoURL = ""
-        deployRepoPath = ""
-        deployEnvBranch = "qa"
+        clearDeploymentForm()
         message = "Saved deployment repo \(repoFullName)."
     }
 
-    private func deleteSourceRepos(offsets: IndexSet) {
-        for index in offsets {
-            modelContext.delete(sourceRepos[index])
-        }
-        persistRepoSettings()
+    private func loadSourceRepoForEditing(_ repo: SourceRepoConfig) {
+        editingSourceRepoID = repo.id
+        sourceRepoURL = repo.repoURL
+        sourceRepoPath = repo.localPath
+        sourceWorkflow = repo.workflowIdentifier
+        sourceTargetBranch = repo.defaultTargetBranch
+        message = "Editing source preset \(repo.repoFullName)."
     }
 
-    private func deleteDeploymentRepos(offsets: IndexSet) {
-        for index in offsets {
-            modelContext.delete(deploymentRepos[index])
+    private func loadDeploymentRepoForEditing(_ repo: DeploymentRepoConfig) {
+        editingDeploymentRepoID = repo.id
+        deployRepoURL = repo.repoURL
+        deployRepoPath = repo.localPath
+        deployEnvBranch = repo.selectedEnvironmentBranch
+        message = "Editing deployment preset \(repo.repoFullName)."
+    }
+
+    private func clearSourceForm() {
+        editingSourceRepoID = nil
+        sourceRepoURL = ""
+        sourceRepoPath = ""
+        sourceWorkflow = ""
+        sourceTargetBranch = "main"
+    }
+
+    private func clearDeploymentForm() {
+        editingDeploymentRepoID = nil
+        deployRepoURL = ""
+        deployRepoPath = ""
+        deployEnvBranch = "qa"
+    }
+
+    private func confirmDelete() {
+        guard let deleteTarget else { return }
+
+        switch deleteTarget {
+        case .source(let id):
+            if let repo = sourceRepos.first(where: { $0.id == id }) {
+                modelContext.delete(repo)
+                if editingSourceRepoID == id {
+                    clearSourceForm()
+                }
+                message = "Deleted source preset."
+            }
+        case .deployment(let id):
+            if let repo = deploymentRepos.first(where: { $0.id == id }) {
+                modelContext.delete(repo)
+                if editingDeploymentRepoID == id {
+                    clearDeploymentForm()
+                }
+                message = "Deleted deployment preset."
+            }
         }
+
         persistRepoSettings()
+        self.deleteTarget = nil
     }
 
     private func restorePersistedRepoSettings() {
