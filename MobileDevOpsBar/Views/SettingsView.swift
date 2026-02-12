@@ -109,11 +109,30 @@ struct SettingsView: View {
         }
         .padding()
         .frame(minWidth: 700, minHeight: 600)
+        .task {
+            restorePersistedRepoSettings()
+        }
     }
 
     private func addSourceRepo() {
         guard let repoFullName = RepoURLParser.fullName(from: sourceRepoURL) else {
             message = "Invalid source repo URL."
+            return
+        }
+
+        if let existing = sourceRepos.first(where: { $0.repoFullName == repoFullName }) {
+            existing.repoURL = sourceRepoURL
+            existing.localPath = sourceRepoPath
+            existing.defaultTargetBranch = sourceTargetBranch
+            existing.workflowIdentifier = sourceWorkflow
+            existing.updatedAt = .now
+            persistRepoSettings()
+
+            sourceRepoURL = ""
+            sourceRepoPath = ""
+            sourceWorkflow = ""
+            sourceTargetBranch = "main"
+            message = "Updated source repo \(repoFullName)."
             return
         }
 
@@ -125,6 +144,7 @@ struct SettingsView: View {
             workflowIdentifier: sourceWorkflow
         )
         modelContext.insert(sourceRepo)
+        persistRepoSettings()
 
         sourceRepoURL = ""
         sourceRepoPath = ""
@@ -144,6 +164,7 @@ struct SettingsView: View {
             existing.localPath = deployRepoPath
             existing.selectedEnvironmentBranch = deployEnvBranch
             existing.updatedAt = .now
+            persistRepoSettings()
             message = "Updated deployment repo \(repoFullName)."
             return
         }
@@ -155,6 +176,7 @@ struct SettingsView: View {
             selectedEnvironmentBranch: deployEnvBranch
         )
         modelContext.insert(deploymentRepo)
+        persistRepoSettings()
 
         deployRepoURL = ""
         deployRepoPath = ""
@@ -166,11 +188,29 @@ struct SettingsView: View {
         for index in offsets {
             modelContext.delete(sourceRepos[index])
         }
+        persistRepoSettings()
     }
 
     private func deleteDeploymentRepos(offsets: IndexSet) {
         for index in offsets {
             modelContext.delete(deploymentRepos[index])
+        }
+        persistRepoSettings()
+    }
+
+    private func restorePersistedRepoSettings() {
+        do {
+            try SettingsPersistenceService.restoreRepoSettingsIfNeeded(modelContext: modelContext)
+        } catch {
+            message = "Failed to restore saved settings: \(error.localizedDescription)"
+        }
+    }
+
+    private func persistRepoSettings() {
+        do {
+            try SettingsPersistenceService.saveRepoSettings(modelContext: modelContext)
+        } catch {
+            message = "Failed to persist repo settings: \(error.localizedDescription)"
         }
     }
 }

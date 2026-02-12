@@ -18,6 +18,8 @@ Build a macOS desktop tool (menu bar + dashboard) to support daily development w
   - Optional auto refresh every 20 minutes (default OFF).
 - Auth: GitHub PAT stored in Keychain.
 - Repos are configurable by pasting GitHub repo URL.
+- Repo settings persist across app reinstall by storing non-secret settings in
+  `~/Library/Application Support/MobileDevOpsBar/settings-v1.json`.
 
 ## Branch Rules
 - Ticket formats:

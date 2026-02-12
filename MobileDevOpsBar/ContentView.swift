@@ -144,6 +144,7 @@ struct ContentView: View {
                 .padding(.vertical, 8)
         }
         .task {
+            try? SettingsPersistenceService.restoreRepoSettingsIfNeeded(modelContext: modelContext)
             NotificationService.requestAuthorizationIfNeeded()
         }
         .alert("Delete Work Item", isPresented: $showingDeleteConfirmation) {

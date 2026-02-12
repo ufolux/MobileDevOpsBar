@@ -65,6 +65,13 @@
   - fetch base branch list from GitHub
   - select target/base branch in a modal
   - create source PR and persist PR URL/number in work item
+- Added persistent repo settings store (`SettingsPersistenceService`):
+  - saves source/deployment repo setup to `~/Library/Application Support/MobileDevOpsBar/settings-v1.json`
+  - restores repo setup on app startup and settings/new-item entry points
+  - keeps repo setup available after app reinstall
+- Updated settings management behavior:
+  - source repo add now upserts existing entries by repo full name
+  - settings changes and deletions persist immediately to JSON storage
 
 ### In Progress
 - End-to-end hardening (API edge cases, git failure recovery, and UX messaging).

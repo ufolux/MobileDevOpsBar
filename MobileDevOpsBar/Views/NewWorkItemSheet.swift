@@ -113,6 +113,7 @@ struct NewWorkItemSheet: View {
         .padding(20)
         .frame(width: 580)
         .onAppear {
+            try? SettingsPersistenceService.restoreRepoSettingsIfNeeded(modelContext: modelContext)
             if selectedRepoID == nil {
                 selectedRepoID = sourceRepos.first?.id
             }
@@ -142,6 +143,7 @@ struct NewWorkItemSheet: View {
             workflowIdentifier: workflow
         )
         modelContext.insert(sourceRepo)
+        try? SettingsPersistenceService.saveRepoSettings(modelContext: modelContext)
 
         selectedRepoID = sourceRepo.id
         errorMessage = ""
