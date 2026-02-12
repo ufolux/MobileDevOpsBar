@@ -12,7 +12,9 @@ import SwiftData
 struct MobileDevOpsBarApp: App {
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
-            Item.self,
+            WorkItem.self,
+            SourceRepoConfig.self,
+            DeploymentRepoConfig.self,
         ])
         let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
 
@@ -24,9 +26,19 @@ struct MobileDevOpsBarApp: App {
     }()
 
     var body: some Scene {
-        WindowGroup {
+        WindowGroup("Dashboard", id: "dashboard") {
             ContentView()
         }
         .modelContainer(sharedModelContainer)
+
+        MenuBarExtra("Mobile DevOps", systemImage: "hammer") {
+            MenuBarView()
+                .modelContainer(sharedModelContainer)
+        }
+
+        Settings {
+            SettingsView()
+                .modelContainer(sharedModelContainer)
+        }
     }
 }
