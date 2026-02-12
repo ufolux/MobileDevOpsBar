@@ -31,7 +31,6 @@ struct SettingsView: View {
     @State private var editingDeploymentRepoID: UUID?
     @State private var deleteTarget: DeleteTarget?
 
-    @AppStorage("rallyLinkTemplate") private var rallyLinkTemplate = ""
     @AppStorage("autoRefreshEnabled") private var autoRefreshEnabled = false
     @AppStorage("notifyMerged") private var notifyMerged = true
     @AppStorage("notifyChecksFailed") private var notifyChecksFailed = true
@@ -45,7 +44,6 @@ struct SettingsView: View {
                 sourceRepoSection
                 deploymentSection
                 preferencesSection
-                rallySection
 
                 if !message.isEmpty {
                     Text(message)
@@ -218,18 +216,6 @@ struct SettingsView: View {
                 Toggle("Notify on failed checks", isOn: $notifyChecksFailed)
                 Toggle("Notify on review requested", isOn: $notifyReviewRequested)
                 Toggle("Notify on PR comments", isOn: $notifyPRComments)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
-    }
-
-    private var rallySection: some View {
-        GroupBox("Rally") {
-            VStack(alignment: .leading, spacing: 8) {
-                TextField("Rally URL template", text: $rallyLinkTemplate)
-                Text("Use {ticketnumber}. Example: https://rally.example.com/detail/{ticketnumber}")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }

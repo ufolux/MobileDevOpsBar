@@ -72,6 +72,11 @@
 - Updated settings management behavior:
   - source repo add now upserts existing entries by repo full name
   - settings changes and deletions persist immediately to JSON storage
+- Switched Rally handling to per-item manual markdown links:
+  - added `RallyMarkdownParser` for `[ticket](url)` parsing
+  - New Work Item now accepts multiple markdown lines (one item per line)
+  - Work item details now save/edit Rally markdown directly per item
+  - removed global Rally template setting
 
 ### In Progress
 - End-to-end hardening (API edge cases, git failure recovery, and UX messaging).

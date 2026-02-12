@@ -4,7 +4,7 @@
 Build a macOS desktop tool (menu bar + dashboard) to support daily development workflow from ticket intake through deployment config PR updates.
 
 ## Primary Workflow
-1. Input Rally ticket IDs (stories and defects).
+1. Input Rally links manually for each work item using markdown format.
 2. Create local git branches from ticket IDs.
 3. Detect PRs automatically from branches.
 4. Notify on PR changes (merged, checks failed, review requested, comments).
@@ -22,12 +22,12 @@ Build a macOS desktop tool (menu bar + dashboard) to support daily development w
   `~/Library/Application Support/MobileDevOpsBar/settings-v1.json`.
 
 ## Branch Rules
-- Ticket formats:
-  - Story: `US<digits>`
-  - Defect: `DE<digits>`
+- Ticket source:
+  - Parsed from markdown label in `[ticket](url)`.
 - Naming:
   - `US123` -> `feature/starship/US123-{sequence}`
   - `DE123` -> `fix/starship/DE123-{sequence}`
+- Defect-like IDs with `DF` are also treated as fix branches.
 - Sequence policy: per-ticket increment (`US123-1`, `US123-2`, ...).
 
 ## PR Tracking
@@ -70,9 +70,10 @@ Build a macOS desktop tool (menu bar + dashboard) to support daily development w
 5. Activity log (phase 2)
 
 ## Rally Link
-- Settings provides Rally URL template support.
-- Template supports `{ticketnumber}` placeholder.
-- Work item detail shows a clickable Rally link when template is configured.
+- Each work item stores its own Rally markdown link.
+- Input format: `[ticket](url)`.
+- New Work Item supports multiple markdown lines (one work item per line).
+- Work item detail supports editing and saving Rally markdown per item.
 
 ## Implementation Phases
 1. App shell + data models + settings + keychain.

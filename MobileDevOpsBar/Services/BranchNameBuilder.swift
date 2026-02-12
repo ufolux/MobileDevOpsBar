@@ -5,7 +5,7 @@ enum BranchNameBuilder {
         let normalizedTicketID = ticketID.uppercased()
         let prefix: String
 
-        if normalizedTicketID.hasPrefix("DE") {
+        if normalizedTicketID.hasPrefix("DE") || normalizedTicketID.hasPrefix("DF") {
             prefix = "fix/starship/\(normalizedTicketID)"
         } else {
             prefix = "feature/starship/\(normalizedTicketID)"

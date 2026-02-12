@@ -9,7 +9,7 @@ struct NewWorkItemSheet: View {
     let existingBranches: [String]
     let onDone: (String) -> Void
 
-    @State private var ticketText = ""
+    @State private var rallyMarkdownText = ""
     @State private var selectedRepoID: UUID?
     @State private var createGitBranch = true
     @State private var errorMessage = ""
@@ -18,8 +18,12 @@ struct NewWorkItemSheet: View {
     @State private var setupWorkflow = ""
     @State private var setupTargetBranch = "main"
 
-    private var parsedTickets: [String] {
-        TicketParser.parseTickets(from: ticketText)
+    private var parsedRallyEntries: [RallyEntry] {
+        RallyMarkdownParser.parseEntries(from: rallyMarkdownText).entries
+    }
+
+    private var invalidRallyLines: [String] {
+        RallyMarkdownParser.parseEntries(from: rallyMarkdownText).invalidLines
     }
 
     var body: some View {
@@ -70,26 +74,36 @@ struct NewWorkItemSheet: View {
                     }
                 }
 
-                Text("Tickets")
+                Text("Rally Links")
                     .font(.headline)
 
-                TextEditor(text: $ticketText)
+                TextEditor(text: $rallyMarkdownText)
                     .font(.body.monospaced())
                     .frame(minHeight: 120)
                     .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.secondary.opacity(0.2)))
 
+                Text("Use one line per item in markdown format: [DF1234](https://rally.example.com/...) ")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
                 Toggle("Create local git branch now", isOn: $createGitBranch)
 
-                if !parsedTickets.isEmpty {
+                if !parsedRallyEntries.isEmpty {
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("Parsed tickets")
+                        Text("Parsed work items")
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
-                        ForEach(parsedTickets, id: \.self) { ticket in
-                            Text("- \(ticket) -> \(BranchNameBuilder.nextBranchName(for: ticket, existingBranches: existingBranches))")
+                        ForEach(parsedRallyEntries, id: \.markdown) { entry in
+                            Text("- \(entry.ticketNumber) -> \(BranchNameBuilder.nextBranchName(for: entry.ticketNumber, existingBranches: existingBranches))")
                                 .font(.caption)
                         }
                     }
+                }
+
+                if !invalidRallyLines.isEmpty {
+                    Text("Invalid lines: \(invalidRallyLines.count). Expected [Ticket](url).")
+                        .foregroundStyle(.orange)
+                        .font(.caption)
                 }
 
                 if !errorMessage.isEmpty {
@@ -155,24 +169,33 @@ struct NewWorkItemSheet: View {
             return
         }
 
-        guard !parsedTickets.isEmpty else {
-            errorMessage = "No valid tickets found. Use values like US12345 or DE12345."
+        let parsed = RallyMarkdownParser.parseEntries(from: rallyMarkdownText)
+        guard !parsed.entries.isEmpty else {
+            errorMessage = "No valid Rally lines found. Use [Ticket](url)."
+            return
+        }
+
+        guard parsed.invalidLines.isEmpty else {
+            errorMessage = "Some lines are invalid. Fix markdown format and try again."
             return
         }
 
         var messageParts: [String] = []
 
-        for ticket in parsedTickets {
-            let branchName = BranchNameBuilder.nextBranchName(for: ticket, existingBranches: existingBranches + messageParts)
+        for entry in parsed.entries {
+            let branchName = BranchNameBuilder.nextBranchName(for: entry.ticketNumber, existingBranches: existingBranches + messageParts)
             do {
                 if createGitBranch {
                     try GitBranchService.createAndCheckoutBranch(repoPath: selectedRepo.localPath, branchName: branchName)
                 }
 
                 let item = WorkItem(
-                    ticketID: ticket,
+                    ticketID: entry.ticketNumber,
                     sourceRepoFullName: selectedRepo.repoFullName,
-                    localBranch: branchName
+                    localBranch: branchName,
+                    rallyMarkdown: entry.markdown,
+                    rallyTicketNumber: entry.ticketNumber,
+                    rallyURLString: entry.url.absoluteString
                 )
                 modelContext.insert(item)
                 messageParts.append(branchName)
@@ -183,7 +206,7 @@ struct NewWorkItemSheet: View {
         }
 
         selectedRepo.updatedAt = .now
-        onDone("Created \(parsedTickets.count) work item(s).")
+        onDone("Created \(parsed.entries.count) work item(s).")
         dismiss()
     }
 }

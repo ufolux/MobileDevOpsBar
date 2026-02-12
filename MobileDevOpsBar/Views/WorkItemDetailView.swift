@@ -5,10 +5,13 @@ struct WorkItemDetailView: View {
     let onRefresh: () -> Void
     let onCreateDeploymentPR: () -> Void
     let onCreateSourcePR: () -> Void
-    @AppStorage("rallyLinkTemplate") private var rallyLinkTemplate = ""
+
+    @State private var rallyMarkdownInput = ""
+    @State private var rallyMessage = ""
 
     private var rallyURL: URL? {
-        RallyLinkBuilder.url(template: rallyLinkTemplate, ticketID: item.ticketID)
+        guard let rallyURLString = item.rallyURLString else { return nil }
+        return URL(string: rallyURLString)
     }
 
     var body: some View {
@@ -17,8 +20,26 @@ struct WorkItemDetailView: View {
                 LabeledContent("Ticket ID", value: item.ticketID)
                 LabeledContent("Source Repo", value: item.sourceRepoFullName)
                 LabeledContent("Local Branch", value: item.localBranch)
-                if let rallyURL {
-                    Link("Open Rally Ticket", destination: rallyURL)
+            }
+
+            Section("Rally Link") {
+                TextField("[DF1234](https://...)", text: $rallyMarkdownInput)
+                    .textFieldStyle(.roundedBorder)
+
+                HStack {
+                    Button("Save Rally Link") {
+                        saveRallyLink()
+                    }
+
+                    if let rallyURL {
+                        Link("Open Rally Ticket", destination: rallyURL)
+                    }
+                }
+
+                if !rallyMessage.isEmpty {
+                    Text(rallyMessage)
+                        .font(.caption)
+                        .foregroundColor(rallyMessage.hasPrefix("Saved") ? .secondary : .red)
                 }
             }
 
@@ -52,5 +73,32 @@ struct WorkItemDetailView: View {
             Button("Refresh Item", action: onRefresh)
         }
         .formStyle(.grouped)
+        .onAppear {
+            rallyMarkdownInput = item.rallyMarkdown ?? ""
+        }
+    }
+
+    private func saveRallyLink() {
+        let trimmed = rallyMarkdownInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty {
+            item.rallyMarkdown = nil
+            item.rallyTicketNumber = nil
+            item.rallyURLString = nil
+            rallyMessage = "Saved: cleared Rally link."
+            item.updatedAt = .now
+            return
+        }
+
+        guard let entry = RallyMarkdownParser.parseEntry(from: trimmed) else {
+            rallyMessage = "Invalid markdown. Use [Ticket](url)."
+            return
+        }
+
+        item.rallyMarkdown = entry.markdown
+        item.rallyTicketNumber = entry.ticketNumber
+        item.rallyURLString = entry.url.absoluteString
+        item.ticketID = entry.ticketNumber
+        rallyMessage = "Saved Rally link."
+        item.updatedAt = .now
     }
 }

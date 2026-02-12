@@ -20,6 +20,9 @@ final class WorkItem {
     var ticketID: String
     var sourceRepoFullName: String
     var localBranch: String
+    var rallyMarkdown: String?
+    var rallyTicketNumber: String?
+    var rallyURLString: String?
     var prURL: String?
     var prNumber: Int?
     var headSHA: String?
@@ -40,6 +43,9 @@ final class WorkItem {
         ticketID: String,
         sourceRepoFullName: String,
         localBranch: String,
+        rallyMarkdown: String? = nil,
+        rallyTicketNumber: String? = nil,
+        rallyURLString: String? = nil,
         prURL: String? = nil,
         prNumber: Int? = nil,
         headSHA: String? = nil,
@@ -59,6 +65,9 @@ final class WorkItem {
         self.ticketID = ticketID
         self.sourceRepoFullName = sourceRepoFullName
         self.localBranch = localBranch
+        self.rallyMarkdown = rallyMarkdown
+        self.rallyTicketNumber = rallyTicketNumber
+        self.rallyURLString = rallyURLString
         self.prURL = prURL
         self.prNumber = prNumber
         self.headSHA = headSHA
