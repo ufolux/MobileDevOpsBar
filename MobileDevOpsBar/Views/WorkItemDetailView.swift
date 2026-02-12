@@ -8,6 +8,14 @@ struct WorkItemDetailView: View {
 
     @State private var rallyMarkdownInput = ""
     @State private var rallyMessage = ""
+    @State private var selectedWorkflow: WorkflowTab = .mobile
+
+    private enum WorkflowTab: String, CaseIterable, Identifiable {
+        case mobile = "Mobile"
+        case web = "Web"
+
+        var id: Self { self }
+    }
 
     private var rallyURL: URL? {
         guard let rallyURLString = item.rallyURLString else { return nil }
@@ -51,15 +59,31 @@ struct WorkItemDetailView: View {
                 Button("Create Source PR", action: onCreateSourcePR)
             }
 
-            Section("Build Tag") {
-                LabeledContent("Latest Tag", value: item.latestTag ?? "-")
-                LabeledContent("Last Synced", value: item.lastSyncedAt?.formatted(date: .numeric, time: .shortened) ?? "Never")
+            Section("Workflow") {
+                Picker("Platform", selection: $selectedWorkflow) {
+                    ForEach(WorkflowTab.allCases) { tab in
+                        Text(tab.rawValue).tag(tab)
+                    }
+                }
+                .pickerStyle(.segmented)
             }
 
-            Section("Deployment") {
-                LabeledContent("Deployment PR", value: item.deploymentPRURL ?? "-")
-                Button("Create Deployment Config PR", action: onCreateDeploymentPR)
-                    .disabled(item.latestTag?.isEmpty ?? true)
+            if selectedWorkflow == .mobile {
+                Section("Build Tag") {
+                    LabeledContent("Latest Tag", value: item.latestTag ?? "-")
+                    LabeledContent("Last Synced", value: item.lastSyncedAt?.formatted(date: .numeric, time: .shortened) ?? "Never")
+                }
+
+                Section("Deployment") {
+                    LabeledContent("Deployment PR", value: item.deploymentPRURL ?? "-")
+                    Button("Create Deployment Config PR", action: onCreateDeploymentPR)
+                        .disabled(item.latestTag?.isEmpty ?? true)
+                }
+            } else {
+                Section("Web") {
+                    Text("Web workflow placeholder")
+                        .foregroundStyle(.secondary)
+                }
             }
 
             if let lastError = item.lastErrorMessage, !lastError.isEmpty {

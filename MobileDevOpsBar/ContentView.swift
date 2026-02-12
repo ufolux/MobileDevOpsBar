@@ -3,22 +3,6 @@ import SwiftData
 import Combine
 
 struct ContentView: View {
-    var body: some View {
-        TabView {
-            MobileWorkflowView()
-                .tabItem {
-                    Label("Mobile Workflow", systemImage: "iphone")
-                }
-
-            WebWorkflowPlaceholderView()
-                .tabItem {
-                    Label("Web", systemImage: "globe")
-                }
-        }
-    }
-}
-
-private struct MobileWorkflowView: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \WorkItem.updatedAt, order: .reverse) private var workItems: [WorkItem]
     @Query(sort: \SourceRepoConfig.updatedAt, order: .reverse) private var sourceRepos: [SourceRepoConfig]
@@ -415,25 +399,6 @@ private struct MobileWorkflowView: View {
 
         statusMessage = "Deleted \(itemsToDelete.count) item(s)."
         pendingDeletionIDs = []
-    }
-}
-
-private struct WebWorkflowPlaceholderView: View {
-    var body: some View {
-        VStack(spacing: 12) {
-            Image(systemName: "globe")
-                .font(.system(size: 36))
-                .foregroundStyle(.secondary)
-
-            Text("Web workflow coming soon")
-                .font(.title3)
-
-            Text("This tab is reserved for web-specific DevOps flows.")
-                .font(.callout)
-                .foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding()
     }
 }
 
