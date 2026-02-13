@@ -19,6 +19,7 @@ struct SettingsView: View {
     @Query(sort: \DeploymentRepoConfig.updatedAt, order: .reverse) private var deploymentRepos: [DeploymentRepoConfig]
 
     @State private var githubToken = KeychainService.loadGitHubToken()
+    @State private var harnessAPIKey = KeychainService.loadHarnessAPIKey()
     @State private var sourceRepoURL = ""
     @State private var sourceRepoPath = ""
     @State private var sourceWorkflow = ""
@@ -76,12 +77,14 @@ struct SettingsView: View {
         GroupBox("Authentication") {
             VStack(alignment: .leading, spacing: 10) {
                 SecureField("GitHub PAT", text: $githubToken)
+                SecureField("Harness API Key", text: $harnessAPIKey)
                 Button("Save Token") {
                     do {
                         try KeychainService.saveGitHubToken(githubToken)
-                        message = "GitHub token saved to Keychain."
+                        try KeychainService.saveHarnessAPIKey(harnessAPIKey)
+                        message = "GitHub token and Harness API key saved to Keychain."
                     } catch {
-                        message = "Failed to save token: \(error.localizedDescription)"
+                        message = "Failed to save credentials: \(error.localizedDescription)"
                     }
                 }
             }
